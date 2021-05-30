@@ -141,6 +141,7 @@ public int warmTime = 0;
             if(warmTime > F_INIT){
             // 达到阈值，更新骨干状态
                 updateBackboneStatus(otherHost);
+//                updateBackboneStatus2(otherHost);
             }
             warmTime++;
         }
@@ -178,7 +179,63 @@ public int warmTime = 0;
     }
 ```
 
-### 3. 求最短路径算法
+### 3. ANCC算法
+对于当前节点及其两个邻居，存在一组邻居之间的路径，根据累积延时计算出的延时小于当前节点所在路径的延时，那么当前节点就不是骨干节点。
+```java
+    private void updateBackboneStatus2(DTNHost host){
+        // 累计频次
+        double AccumulatedFreq = 0;
+        // 累计延迟
+        double AccumulatedDelay = 0;
+        // 对于本节点的任意两个邻居，它们之间的累计延迟都要小于等于包含本节点的路径的延时，才能将本节点置为非骨干节点，否则它就是骨干
+        boolean flag = true;
+        // 一重循环，选定本节点的非当前连接节点的邻居，即非host的邻居，通过host在2跳内找到该邻居
+        for (Map.Entry<DTNHost, Integer> selfEntry : freq.entrySet()){
+            AccumulatedFreq = 0;
+            DTNHost h1 = selfEntry.getKey();
+            if(h1.equals(host)) continue;
+            MessageRouter hostRouter = host.getRouter();
+            assert hostRouter instanceof AdaptiveBackboneRouter : "error";
+            Map<DTNHost, Integer> hostFreq = ((AdaptiveBackboneRouter)hostRouter).freq;
+            // 二重循环，选中host的任意相连节点，即第1跳节点
+            for(Map.Entry<DTNHost, Integer> hostEntry : hostFreq.entrySet()){
+                DTNHost h2 = hostEntry.getKey();
+                if(h2.equals(getHost())) continue;
+                // 选中的节点是要找的邻居，计算累积频次
+                if(h2.equals(h1)){
+                    AccumulatedFreq += (double) hostEntry.getValue();
+                    continue;
+                }
+                MessageRouter r = h2.getRouter();
+                assert r instanceof AdaptiveBackboneRouter : "error";
+                Map<DTNHost, Integer> f = ((AdaptiveBackboneRouter)r).freq;
+                // 三重循环，选中host相连节点的相连节点，即第2跳节点
+                for(Map.Entry<DTNHost, Integer> e : f.entrySet()) {
+                    DTNHost h3 = e.getKey();
+                    if (h3.equals(getHost()) || h3.equals(host)) continue;
+                    // 选中的节点是要找的邻居，计算累积频次
+                    if (h3.equals(h1)) {
+                        AccumulatedFreq += 1.0 / (1.0 / hostEntry.getValue() + 1.0 / e.getValue());
+                    }
+                }
+            }
+            // 计算累积延迟
+            AccumulatedDelay = 1.0/AccumulatedFreq;
+            // 计算本节点所在路径的延迟
+            double OriginDelay = 1.0/freq.get(h1) + 1.0/freq.get(host);
+            // 如果存在累积延迟大于原始延迟，则寻找失败，本节点不能被标记为非骨干
+            if(AccumulatedDelay > OriginDelay){
+                flag = false;
+                break;
+            }
+        }
+        marked = !flag;
+    }
+
+```
+
+
+### 4. 求最短路径算法
 
 利用Dijkstra算法求from到to的最短路径
 
@@ -269,7 +326,7 @@ public int warmTime = 0;
     }
 ```
 
-### 4. 重写update()函数
+### 5. 重写update()函数
 
 重写update()函数，在更新时，向目标节点以及骨干节点发送消息
 
@@ -324,6 +381,27 @@ public int warmTime = 0;
 
 
 ## 三、仿真结果
+### 1. 仿真场景
+
+| 场景   | 场景1 | 场景2 | 场景3 | 场景4 | 场景5 | 场景6 |
+| ------ | ----- | ----- | ----- | ----- | ----- | ----- |
+| people | 40    | 40    | 40    | 60    | 80    | 80    |
+| cars   | 10    | 10    | 20    | 30    | 40    | 40    |
+| trams  | 0     | 3     | 6     | 9     | 6     | 0     |
+| buses  | 0     | 0     | 0     | 0     | 0     | 5     |
+| 总和   | 50    | 53    | 66    | 99    | 126   | 125   |
+
+### 2. 节点关系图
+[节点关系图](http://rocksugar.work/iot/NodeNetWork.html)
+
+### 3. 消息送达率
+[送达率对比图](http://rocksugar.work/iot/DeliveryProbability.html)
+
+### 4. 平均延时
+[平均演示对比图](http://rocksugar.work/iot/Latency.html)
+
+### 5. 网络负载
+[网络负载对比图](http://rocksugar.work/iot/OverheadRatio.html)
 
 
 
@@ -334,6 +412,23 @@ public int warmTime = 0;
 1. 论文中所采用的骨干节点模型并不适用于所有场景，在某个场景中，节点的运动十分活跃就很难生成DTCDS，或者说很多的节点都成为了骨干节点，模型退化成了Epidemic算法。
 2. 在一个运动频繁的场景中，加权图中的节点的度会非常大，导致运行的效率降低
 3. 当生成的加权图十分复杂时，只利用ANCC算法就不能生成骨干节点，例如：
+
+    ![](./example1.png)
+
+    在上图中，根据公式$E(L{uw})\le E(l_R)=\frac{1}{f_{uv}}+\frac{1}{f_{vw}}$
+
+    $$
+    \begin{align}
+        E(L_{bc})&=1/(\frac{1}{E(L_{R1})}+\frac{1}{E(L_{R2})}+\frac{1}{E(L_{R3})}+\frac{1}{E(L_{R4})})\\
+            &=1/(\frac{1}{\frac{1}{f_{bd}}+\frac{1}{f_{dc}}} + \frac{1}{\frac{1}{f_{be}}+\frac{1}{f_{ec}}} + \frac{1}{\frac{1}{f_{bf}}+\frac{1}{f_{fc}}} + \frac{1}{\frac{1}{f_{bg}}+\frac{1}{f_{gc}}})\\
+            &=1/(\frac{1}{2} + \frac{1}{2} + \frac{1}{2} + \frac{1}{2})\\
+            &=\frac{1}{2}\\
+        E(L_R)&=\frac{1}{f_{ba}} + \frac{1}{f_{ac}}\\
+            &=\frac{1}{2}
+    \end{align}
+    $$
+    所以有$E(L{bc})\le E(l_R)$，则a被排除。
+
 4. 论文中提出的模型，并未考虑时间维度上的变化，可能某两个节点在一段时间内联系密切，使得其中的节点成为了骨干节点，而一段时间后两节点联系停止，该骨干节点仍然拥有骨干地位，需要较长时间才能退化为普通节点。
 
 ### 2. 改进
