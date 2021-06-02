@@ -392,7 +392,7 @@ public int warmTime = 0;
 | 总和   | 50    | 53    | 66    | 99    | 126   | 125   |
 
 ### 2. 节点关系图
-[节点关系图](http://rocksugar.work/iot/NodeNetWork.html)
+[节点关系图](http://rocksugar.work/iot/NodeNetwork.html)
 
 ### 3. 消息送达率
 [送达率对比图](http://rocksugar.work/iot/DeliveryProbability.html)
