@@ -1,5 +1,5 @@
 # The reproduction of Adaptive Backbone-based Routing in Delay Tolerant Networks
-A replay of paper ———— Adaptive Backbone-based Routing in Delay Tolerant Networks in ONE(Opportunity Network Emulator)
+A replay of paper —— Adaptive Backbone-based Routing in Delay Tolerant Networks in ONE(Opportunity Network Emulator)
 
 物联网通信与网络技术课程大作业，在ONE中复现上述论文
 
